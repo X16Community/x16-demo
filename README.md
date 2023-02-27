@@ -29,4 +29,4 @@ and the cc65 toolchain (needed for some files)
 
 # License
 
-As of January 1, 2023, all contributions to this repository will fall under the 2-Clause BSD license. Code added prior to this may fall under other licenses and will be noted in individual directories.
+As of January 1, 2023, all contributions to this repository will fall under the 2-Clause BSD license. Code added prior to this may fall under other licenses and may be noted in individual directories.
