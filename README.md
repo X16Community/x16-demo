@@ -26,3 +26,7 @@ The Makefile need the acme compiler.
 Install the acme compiler from 
 wget https://github.com/meonwax/acme/archive/master.zip
 and the cc65 toolchain (needed for some files)
+
+# License
+
+As of January 1, 2023, all contributions to this repository will fall under the 2-Clause BSD license. Code added prior to this may fall under other licenses and will be noted in individual directories.
