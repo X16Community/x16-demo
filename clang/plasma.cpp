@@ -12,13 +12,13 @@ extern "C" {
 #include <cx16.h>
 }
 
-// Address where to generate the 8 * 256 character charset used for plasma effect
-#define CHARSET_ADDRESS 0x3000
-// Helper macro to write a single byte to memory
-#define POKE(address, value) \
-    (*reinterpret_cast<volatile uint8_t*>(address)) = value
-// Cyclic sine function
-static const uint8_t sine_table[256] = {
+// Helper function to write a single byte to memory
+inline void poke(const uint16_t address, const uint8_t value) {
+    *reinterpret_cast<volatile uint8_t*>(address) = value;
+}
+
+// Cyclic sine lookup table
+constexpr uint8_t sine_table[256] = {
     0x80, 0x7d, 0x7a, 0x77, 0x74, 0x70, 0x6d, 0x6a, 0x67, 0x64, 0x61, 0x5e,
     0x5b, 0x58, 0x55, 0x52, 0x4f, 0x4d, 0x4a, 0x47, 0x44, 0x41, 0x3f, 0x3c,
     0x39, 0x37, 0x34, 0x32, 0x2f, 0x2d, 0x2b, 0x28, 0x26, 0x24, 0x22, 0x20,
@@ -47,7 +47,7 @@ static const uint8_t sine_table[256] = {
  *
  * See https://en.wikipedia.org/wiki/Xorshift
  */
-class RandomXOR {
+class RandomXORS {
   private:
     uint32_t state = 7;
 
@@ -64,11 +64,11 @@ class RandomXOR {
 };
 
 /// Generate charset with 8 * 256 characters at given address
-void make_charset(uint16_t charset_address, RandomXOR& rng) {
+void make_charset(uint16_t charset_address, RandomXORS& rng) {
     // Lambda function to generate a single 8x8 bit character
     auto make_char = [&](const uint8_t sine) {
         uint8_t char_pattern = 0;
-        const uint8_t bits[8] = {1, 2, 4, 8, 16, 32, 64, 128};
+        constexpr uint8_t bits[8] = {1, 2, 4, 8, 16, 32, 64, 128};
         for (const auto bit : bits) {
             if (rng.rand8() > sine) {
                 char_pattern |= bit;
@@ -78,7 +78,7 @@ void make_charset(uint16_t charset_address, RandomXOR& rng) {
     };
     for (const auto sine : sine_table) {
         for (int _i = 0; _i < 8; ++_i) {
-            POKE(charset_address++, make_char(sine));
+            poke(charset_address++, make_char(sine));
         }
     }
 }
@@ -99,9 +99,24 @@ class Plasma {
     uint8_t y_cnt1 = 0;
     uint8_t y_cnt2 = 0;
 
+    // Write summed buffers to VERA screen memory
+    void write_to_screen() const {
+        // Set a 2 byte stride (one text, one color) after each write
+        VERA.address_hi = VERA_INC_2 | 1;
+        VERA.control = 0;
+        unsigned short row_cnt = 0;
+        for (const auto y : ybuffer) {
+            VERA.address = 0xb000 + (2 * 128 * row_cnt++);
+#pragma unroll
+            for (const auto x : xbuffer) {
+                VERA.data0 = x + y;
+            }
+        }
+    }
+
   public:
     /// Generate and activate charset at given address
-    Plasma(const uint16_t charset_address, RandomXOR& rng) {
+    Plasma(const uint16_t charset_address, RandomXORS& rng) {
         make_charset(charset_address, rng);
         cx16_k_screen_set_charset(
             0,
@@ -129,24 +144,17 @@ class Plasma {
         x_cnt2 -= 3;
         y_cnt1 += 3;
         y_cnt2 -= 5;
-
-        // Set a 2 byte stride (one text, one color) after each write
-        VERA.address_hi = VERA_INC_2 | 1;
-        VERA.control = 0;
-        unsigned short row_cnt = 0;
-        for (const auto y : ybuffer) {
-            VERA.address = 0xb000 + (2 * 128 * row_cnt++);
-#pragma unroll
-            for (const auto x : xbuffer) {
-                VERA.data0 = x + y;
-            }
-        }
+        
+        write_to_screen();
     }
 };
 
 int main() {
-    RandomXOR rng;
-    Plasma<80, 60> plasma(CHARSET_ADDRESS, rng);
+    constexpr unsigned short COLS = 80;
+    constexpr unsigned short ROWS = 60;
+    constexpr unsigned short CHARSET_ADDRESS = 0x3000;
+    RandomXORS rng;
+    Plasma<COLS, ROWS> plasma(CHARSET_ADDRESS, rng);
     while (true) {
         plasma.update();
     }
