@@ -2,20 +2,22 @@
  * Plasma effect sourced from cc65/samples/cbm
  * - 2001 by groepaz
  * - Cleanup and porting by Ullrich von Bassewitz.
- * - 2023 cx16/llvm-mos c++ adaptation (wombat)
+ * - 2023 CX16/LLVM-MOS C++ adaptation (Wombat)
  *   Clangs `#pragma unroll` gives a significant speedup when using the -Os optimization level.
  */
 
 #include <cstdint>
 #include <array>
-#include <initializer_list>
-#include "cx16mod.h"
+extern "C" {
+    #include <cx16.h>
+}
 
+// Address where to generate the 8 * 256 character charset used for plasma effect
 #define CHARSET_ADDRESS 0x3000
-#define POKE(X, Y) (*(volatile unsigned char*)(X)) = Y
-
-static const uint8_t sinustable[256] = {
-//static const std::array<uint8_t, 256> sinustable = {{
+// Helper function to write a byte to memory
+#define POKE(address, value) (*(volatile uint8_t*)(address)) = value
+// Cyclic sine function
+static const uint8_t sine_table[256] = {
     0x80, 0x7d, 0x7a, 0x77, 0x74, 0x70, 0x6d, 0x6a, 0x67, 0x64, 0x61, 0x5e, 0x5b, 0x58, 0x55, 0x52, 0x4f, 0x4d, 0x4a,
     0x47, 0x44, 0x41, 0x3f, 0x3c, 0x39, 0x37, 0x34, 0x32, 0x2f, 0x2d, 0x2b, 0x28, 0x26, 0x24, 0x22, 0x20, 0x1e, 0x1c,
     0x1a, 0x18, 0x16, 0x15, 0x13, 0x11, 0x10, 0x0f, 0x0d, 0x0c, 0x0b, 0x0a, 0x08, 0x07, 0x06, 0x06, 0x05, 0x04, 0x03,
@@ -36,9 +38,9 @@ static const uint8_t sinustable[256] = {
  *
  * See https://en.wikipedia.org/wiki/Xorshift
  */
-class xorshift_rng {
+class RandomXOR {
   private:
-    uint32_t state = 7; //!< Random number state
+    uint32_t state = 7;
   public:
     inline uint8_t rand8() { return (uint8_t)(rand32() & 0xff); }
     inline uint32_t rand32() {
@@ -49,12 +51,10 @@ class xorshift_rng {
     }
 };
 
-// Global instance of random number generator
-xorshift_rng rng;
-
-void make_charset() {
+// Generate charset with 8 * 256 characters at given address
+void make_charset(uint16_t charset_address, RandomXOR& rng) {
     // Lambda function to generate a single 8x8 bit character
-    auto make_char = [](const uint8_t sine) {
+    auto make_char = [&](const uint8_t sine) {
         uint8_t char_pattern = 0;
         const uint8_t bits[8] = {1, 2, 4, 8, 16, 32, 64, 128};
         for (const auto bit : bits) {
@@ -64,64 +64,77 @@ void make_charset() {
         }
         return char_pattern;
     };
-
-    uint16_t dst = CHARSET_ADDRESS;
-    for (const auto sine : sinustable) {
-        for (int i = 0; i < 8; ++i) {
-            POKE(dst++, make_char(sine));
+    for (const auto sine : sine_table) {
+        for (int _i = 0; _i < 8; ++_i) {
+            POKE(charset_address++, make_char(sine));
         }
     }
 }
 
-// See here for information about the VERA screen memory region:
-// https://github.com/mwiedmann/cx16CodingInC/tree/main/Chapter07-MapBase
-template <unsigned short COLS, unsigned short ROWS> void draw() {
-    static std::array<uint8_t, COLS> xbuffer;
-    static std::array<uint8_t, ROWS> ybuffer;
-    static uint8_t c1A = 0;
-    static uint8_t c1B = 0;
-    static uint8_t c2A = 0;
-    static uint8_t c2B = 0;
+/**
+ * @brief Plasma effect
+ *
+ * See here for information about the VERA screen memory region:
+ * https://github.com/mwiedmann/cx16CodingInC/tree/main/Chapter07-MapBase
+ */
+template <unsigned short COLS, unsigned short ROWS> class Plasma {
+  private:
+    std::array<uint8_t, COLS> xbuffer;
+    std::array<uint8_t, ROWS> ybuffer;
+    uint8_t c1A = 0;
+    uint8_t c1B = 0;
+    uint8_t c2A = 0;
+    uint8_t c2B = 0;
 
-    uint8_t c2a = c2A;
-    uint8_t c2b = c2B;
-    uint8_t c1a = c1A;
-    uint8_t c1b = c1B;
-    for (auto& y : ybuffer) {
-        y = sinustable[c1a] + sinustable[c1b];
-        c1a += 4;
-        c1b += 9;
+  public:
+    // Generate and activate charset at given address
+    Plasma(const uint16_t charset_address, RandomXOR& rng) {
+        make_charset(charset_address, rng);
+        cx16_k_screen_set_charset(0, (uint8_t*)charset_address);
     }
-    c1A += 3;
-    c1B -= 5;
-    c2a = c2A;
-    c2b = c2B;
-    for (auto& x : xbuffer) {
-        x = sinustable[c2a] + sinustable[c2b];
-        c2a += 3;
-        c2b += 7;
-    }
-    c2A += 2;
-    c2B -= 3;
 
-    // Set a 2 byte stride (one text, one color) after each write
-    VERA.address_hi = VERA_INC_2 | 1;
-    VERA.control = 0;
-    unsigned short row_cnt = 0;
-    for (const auto y : ybuffer) {
-        VERA.address = 0xb000 + (2 * 128 * row_cnt++);
+    // Draw next frame
+    void update() {
+        uint8_t c2a = c2A;
+        uint8_t c2b = c2B;
+        uint8_t c1a = c1A;
+        uint8_t c1b = c1B;
+        for (auto& y : ybuffer) {
+            y = sine_table[c1a] + sine_table[c1b];
+            c1a += 4;
+            c1b += 9;
+        }
+        c1A += 3;
+        c1B -= 5;
+        c2a = c2A;
+        c2b = c2B;
+        for (auto& x : xbuffer) {
+            x = sine_table[c2a] + sine_table[c2b];
+            c2a += 3;
+            c2b += 7;
+        }
+        c2A += 2;
+        c2B -= 3;
+
+        // Set a 2 byte stride (one text, one color) after each write
+        VERA.address_hi = VERA_INC_2 | 1;
+        VERA.control = 0;
+        unsigned short row_cnt = 0;
+        for (const auto y : ybuffer) {
+            VERA.address = 0xb000 + (2 * 128 * row_cnt++);
 #pragma unroll
-        for (const auto x : xbuffer) {
-            VERA.data0 = x + y;
+            for (const auto x : xbuffer) {
+                VERA.data0 = x + y;
+            }
         }
     }
-}
+};
 
 int main() {
-    make_charset();
-    cx16_k_screen_set_charset(0, (uint8_t*)CHARSET_ADDRESS);
+    RandomXOR rng;
+    Plasma<80, 60> plasma(CHARSET_ADDRESS, rng);
     while (true) {
-        draw<80, 60>();
+        plasma.update();
     }
     return 0;
 }
