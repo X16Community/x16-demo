@@ -2,8 +2,9 @@
 cmake_minimum_required(VERSION 3.18)
 set(LLVM_MOS_PLATFORM cx16)
 find_package(llvm-mos-sdk REQUIRED)
+project(clang-examples)
 
-# Only needed for C++ projects
+# Only needed if there are C++ source files
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS YES)
@@ -27,8 +28,6 @@ set(CLANG_WARNINGS
     -Wimplicit-fallthrough # warn on statements that fallthrough without an explicit annotation
 )
 add_compile_options(-mcpu=mos65c02 -Os ${CLANG_WARNINGS})
-
-project(clang-examples)
 
 add_executable(bitmap.prg bitmap.c)
 add_executable(plasma.prg plasma.cpp)

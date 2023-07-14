@@ -14,7 +14,7 @@ extern "C" {
 
 // Address where to generate the 8 * 256 character charset used for plasma effect
 #define CHARSET_ADDRESS 0x3000
-// Helper macro to write a byte to memory
+// Helper macro to write a single byte to memory
 #define POKE(address, value) (*reinterpret_cast<volatile uint8_t*>(address)) = value
 // Cyclic sine function
 static const uint8_t sine_table[256] = {
@@ -82,10 +82,10 @@ template <unsigned short COLS, unsigned short ROWS> class Plasma {
   private:
     std::array<uint8_t, COLS> xbuffer;
     std::array<uint8_t, ROWS> ybuffer;
-    uint8_t c1A = 0;
-    uint8_t c1B = 0;
-    uint8_t c2A = 0;
-    uint8_t c2B = 0;
+    uint8_t x_cnt1 = 0;
+    uint8_t x_cnt2 = 0;
+    uint8_t y_cnt1 = 0;
+    uint8_t y_cnt2 = 0;
 
   public:
     /// Generate and activate charset at given address
@@ -96,26 +96,25 @@ template <unsigned short COLS, unsigned short ROWS> class Plasma {
 
     /// Draw next frame
     void update() {
-        uint8_t c2a = c2A;
-        uint8_t c2b = c2B;
-        uint8_t c1a = c1A;
-        uint8_t c1b = c1B;
+        auto i = y_cnt1;
+        auto j = y_cnt2;
         for (auto& y : ybuffer) {
-            y = sine_table[c1a] + sine_table[c1b];
-            c1a += 4;
-            c1b += 9;
+            y = sine_table[i] + sine_table[j];
+            i += 4;
+            j += 9;
         }
-        c1A += 3;
-        c1B -= 5;
-        c2a = c2A;
-        c2b = c2B;
+        i = x_cnt1;
+        j = x_cnt2;
         for (auto& x : xbuffer) {
-            x = sine_table[c2a] + sine_table[c2b];
-            c2a += 3;
-            c2b += 7;
+            x = sine_table[i] + sine_table[j];
+            i += 3;
+            j += 7;
         }
-        c2A += 2;
-        c2B -= 3;
+
+        x_cnt1 += 2;
+        x_cnt2 -= 3;
+        y_cnt1 += 3;
+        y_cnt2 -= 5;
 
         // Set a 2 byte stride (one text, one color) after each write
         VERA.address_hi = VERA_INC_2 | 1;
