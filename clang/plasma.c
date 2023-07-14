@@ -32,13 +32,21 @@ static const uint8_t sinustable[256] = { 0x80, 0x7d, 0x7a, 0x77, 0x74, 0x70, 0x6
     0xc4, 0xc1, 0xbf, 0xbc, 0xb9, 0xb6, 0xb3, 0xb1, 0xae, 0xab, 0xa8, 0xa5, 0xa2, 0x9f, 0x9c, 0x99, 0x96, 0x93, 0x90, 0x8c,
     0x89, 0x86, 0x83 };
 
-inline uint8_t rand() {
-    // 24-bit entropy
-    unsigned long number = cx16_k_entropy_get();
-    unsigned long a = (number >> 16) & 0xFF;
-    unsigned long b = (number >> 8) & 0xFF;
-    unsigned long c = (number) & 0xFF;
-    return (uint8_t)((a + b + c ) / 3);
+// Random number generator state
+uint32_t rng_state = 7;
+
+// Simple pseudo-random number generator, see https://en.wikipedia.org/wiki/Xorshift
+inline uint32_t rand32()
+{
+    rng_state ^= rng_state << 13;
+    rng_state ^= rng_state >> 17;
+    rng_state ^= rng_state << 5;
+    return rng_state;
+}
+
+inline uint8_t rand8()
+{
+    return (uint8_t)(rand32() & 0xff);
 }
 
 void generate_charset()
@@ -49,7 +57,7 @@ void generate_charset()
         for (unsigned short i = 0; i < sizeof(bits); ++i) {
             uint8_t char_pattern = 0;
             for (int j = 0; j < 8; ++j) {
-                if (rand() > sine) {
+                if (rand8() > sine) {
                     char_pattern |= bits[j];
                 }
             }
