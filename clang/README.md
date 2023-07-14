@@ -33,6 +33,7 @@ x16emu -scale 2 -prg bitmap.prg -run
 ```
 
 ![bitmap colored line example](bitmap-example.png)
+![plasma example](plasma-example.png)
 
   You could also use another emulator (like [box16](https://github.com/indigodarkwolf/box16) or [BitMagic](https://github.com/Yazwh0/BitMagic)) or copy the `.prg` files to a FAT32 SD card for use on actual Commander X16 hardware.
 
