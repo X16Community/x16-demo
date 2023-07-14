@@ -3,19 +3,19 @@
  * - 2001 by groepaz
  * - Cleanup and porting by Ullrich von Bassewitz.
  * - 2023 CX16/LLVM-MOS C++ adaptation (Wombat)
- *   Clangs `#pragma unroll` gives a significant speedup when using the -Os optimization level.
+ *   Clang's `#pragma unroll` gives a significant speedup when using the -Os optimization level.
  */
 
 #include <cstdint>
 #include <array>
 extern "C" {
-    #include <cx16.h>
+#include <cx16.h>
 }
 
 // Address where to generate the 8 * 256 character charset used for plasma effect
 #define CHARSET_ADDRESS 0x3000
-// Helper function to write a byte to memory
-#define POKE(address, value) (*(volatile uint8_t*)(address)) = value
+// Helper macro to write a byte to memory
+#define POKE(address, value) (*reinterpret_cast<volatile uint8_t*>(address)) = value
 // Cyclic sine function
 static const uint8_t sine_table[256] = {
     0x80, 0x7d, 0x7a, 0x77, 0x74, 0x70, 0x6d, 0x6a, 0x67, 0x64, 0x61, 0x5e, 0x5b, 0x58, 0x55, 0x52, 0x4f, 0x4d, 0x4a,
@@ -41,8 +41,9 @@ static const uint8_t sine_table[256] = {
 class RandomXOR {
   private:
     uint32_t state = 7;
+
   public:
-    inline uint8_t rand8() { return (uint8_t)(rand32() & 0xff); }
+    inline uint8_t rand8() { return static_cast<uint8_t>(rand32() & 0xff); }
     inline uint32_t rand32() {
         state ^= state << 13;
         state ^= state >> 17;
@@ -51,7 +52,7 @@ class RandomXOR {
     }
 };
 
-// Generate charset with 8 * 256 characters at given address
+/// Generate charset with 8 * 256 characters at given address
 void make_charset(uint16_t charset_address, RandomXOR& rng) {
     // Lambda function to generate a single 8x8 bit character
     auto make_char = [&](const uint8_t sine) {
@@ -87,13 +88,13 @@ template <unsigned short COLS, unsigned short ROWS> class Plasma {
     uint8_t c2B = 0;
 
   public:
-    // Generate and activate charset at given address
+    /// Generate and activate charset at given address
     Plasma(const uint16_t charset_address, RandomXOR& rng) {
         make_charset(charset_address, rng);
-        cx16_k_screen_set_charset(0, (uint8_t*)charset_address);
+        cx16_k_screen_set_charset(0, reinterpret_cast<uint8_t*>(charset_address));
     }
 
-    // Draw next frame
+    /// Draw next frame
     void update() {
         uint8_t c2a = c2A;
         uint8_t c2b = c2B;
