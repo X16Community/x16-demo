@@ -1,5 +1,7 @@
 /**
- * Plasma effect sourced from cc65/samples/cbm
+ * Simplistic character-mode plasma effect
+ * 
+ * Sourced from cc65/samples/cbm
  * - 2001 by groepaz
  * - Cleanup and porting by Ullrich von Bassewitz.
  * - 2023 CX16/LLVM-MOS C++ adaptation (Wombat)
@@ -18,7 +20,7 @@ inline void poke(const uint16_t address, const uint8_t value) {
 }
 
 // Cyclic sine lookup table
-constexpr uint8_t sine_table[256] = {
+constexpr uint8_t sine_table[UINT8_MAX + 1] = {
     0x80, 0x7d, 0x7a, 0x77, 0x74, 0x70, 0x6d, 0x6a, 0x67, 0x64, 0x61, 0x5e,
     0x5b, 0x58, 0x55, 0x52, 0x4f, 0x4d, 0x4a, 0x47, 0x44, 0x41, 0x3f, 0x3c,
     0x39, 0x37, 0x34, 0x32, 0x2f, 0x2d, 0x2b, 0x28, 0x26, 0x24, 0x22, 0x20,
@@ -65,16 +67,16 @@ class RandomXORS {
 
 /// Generate charset with 8 * 256 characters at given address
 void make_charset(uint16_t charset_address, RandomXORS& rng) {
-    // Lambda function to generate a single 8x8 bit character
+    // Lambda function to generate a single 8x8 bit pattern
     auto make_char = [&](const uint8_t sine) {
-        uint8_t char_pattern = 0;
+        uint8_t pattern = 0;
         constexpr uint8_t bits[8] = {1, 2, 4, 8, 16, 32, 64, 128};
         for (const auto bit : bits) {
             if (rng.rand8() > sine) {
-                char_pattern |= bit;
+                pattern |= bit;
             }
         }
-        return char_pattern;
+        return pattern;
     };
     for (const auto sine : sine_table) {
         for (int _i = 0; _i < 8; ++_i) {
@@ -84,31 +86,32 @@ void make_charset(uint16_t charset_address, RandomXORS& rng) {
 }
 
 /**
- * @brief Plasma effect
+ * @brief Plasma effect class
  *
  * See here for information about the VERA screen memory region:
  * https://github.com/mwiedmann/cx16CodingInC/tree/main/Chapter07-MapBase
  */
-template<unsigned short COLS, unsigned short ROWS>
+template<size_t COLS, size_t ROWS>
 class Plasma {
   private:
-    std::array<uint8_t, COLS> xbuffer;
-    std::array<uint8_t, ROWS> ybuffer;
+    std::array<uint8_t, COLS> xdata;
+    std::array<uint8_t, ROWS> ydata;
     uint8_t x_cnt1 = 0;
     uint8_t x_cnt2 = 0;
     uint8_t y_cnt1 = 0;
     uint8_t y_cnt2 = 0;
 
     // Write summed buffers to VERA screen memory
+    // Set a 2 byte stride - one for text, one for color - after each write
     void write_to_screen() const {
-        // Set a 2 byte stride (one text, one color) after each write
-        VERA.address_hi = VERA_INC_2 | 1;
+        size_t row = 0;
         VERA.control = 0;
-        unsigned short row_cnt = 0;
-        for (const auto y : ybuffer) {
-            VERA.address = 0xb000 + (2 * 128 * row_cnt++);
+        VERA.address_hi = VERA_INC_2 | 1;
+
+        for (const auto y : ydata) {
+            VERA.address = 0xb000 + (2 * 128 * row++);
 #pragma unroll
-            for (const auto x : xbuffer) {
+            for (const auto x : xdata) {
                 VERA.data0 = x + y;
             }
         }
@@ -127,14 +130,14 @@ class Plasma {
     void update() {
         auto i = y_cnt1;
         auto j = y_cnt2;
-        for (auto& y : ybuffer) {
+        for (auto& y : ydata) {
             y = sine_table[i] + sine_table[j];
             i += 4;
             j += 9;
         }
         i = x_cnt1;
         j = x_cnt2;
-        for (auto& x : xbuffer) {
+        for (auto& x : xdata) {
             x = sine_table[i] + sine_table[j];
             i += 3;
             j += 7;
@@ -150,9 +153,9 @@ class Plasma {
 };
 
 int main() {
-    constexpr unsigned short COLS = 80;
-    constexpr unsigned short ROWS = 60;
-    constexpr unsigned short CHARSET_ADDRESS = 0x3000;
+    constexpr size_t COLS = 80;
+    constexpr size_t ROWS = 60;
+    constexpr uint16_t CHARSET_ADDRESS = 0x3000;
     RandomXORS rng;
     Plasma<COLS, ROWS> plasma(CHARSET_ADDRESS, rng);
     while (true) {
