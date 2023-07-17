@@ -106,7 +106,7 @@ class Plasma {
     void write_to_screen() const {
         size_t row = 0;
         VERA.control = 0;
-        VERA.address_hi = VERA_INC_2 | 1;
+        VERA.address_hi = VERA_INC_2 | 1U;
 
         for (const auto y : ydata) {
             VERA.address = 0xb000 + (2 * 128 * row++);
