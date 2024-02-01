@@ -39,19 +39,17 @@ START_HERE:
 	JMP	TERMINAL_LOOP
 
 SET_TERM_TYPE:
-	LDA	TERM_TYPE
-	CMP	#0	;commodore
-	BNE	STT3
-	LDA	#2	;C64 charset
-	JSR	SET_CHARSET
+        LDA    TERM_TYPE
+        CMP    #0    ;commodore
+        BNE    STT3
+    	LDA    #$0E    ;Set upper/lower case
+	JSR    CHROUT
 	RTS
-STT3:	CMP	#1	;ASCII
-	BNE	STT4
-	;LDA	#1	;ISO charset
-	;JSR	SET_CHARSET
-	LDA	#15	
-	JSR	CHROUT
-STT4:	RTS
+STT3:   CMP    #1    ;ASCII
+	BNE    STT4
+	LDA    #15    
+	JSR    CHROUT
+STT4:   RTS
 
 INIT_SERIAL:
 	LDA	#%10000000	;Enable DLAB registers
@@ -165,7 +163,8 @@ TERM_STRING:
 	!PET	"b-ascii",13,0
 
 TERM_READY_STRING:
-	!PET	147,"terminal ready.",13,0
+    !BYTE    $90,$01,$05,$93    ;set color to white on black, clear screen.
+    !PET    "terminal ready.",13,0
 
 BAUD_TABLE_L:
 	!BYTE	$00	;300
